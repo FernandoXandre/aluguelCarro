@@ -31,3 +31,23 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Credenciais sensíveis ###
+application-local.properties application-secret.properties *.env
+
+### Arquivo JAR gerado ###
+*.jar *.war
+
+### Logs ###
+*.log
+logs/
+
+### PDF Trabalho ###
+Trabalho.pdf
+Documentacao_SistemaAluguelCarro.pdf
+
+### Script de geração de documentação ###
+gerar_documentacao.py
+
+### Documentação local Claude Code ###
+CLAUDE.md
