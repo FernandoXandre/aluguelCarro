@@ -2,17 +2,22 @@ package com.projeto_aluguelCarro.aluguelCarro.service;
 
 import com.projeto_aluguelCarro.aluguelCarro.domain.Usuario;
 import com.projeto_aluguelCarro.aluguelCarro.dto.UsuarioDTO;
+import com.projeto_aluguelCarro.aluguelCarro.exception.RegraNegocioException;
 import com.projeto_aluguelCarro.aluguelCarro.repository.UsuarioRepository;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+
 import java.util.List;
 
 @Service
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
 
-    public UsuarioService(UsuarioRepository usuarioRepository) {
+    public UsuarioService(UsuarioRepository usuarioRepository, BCryptPasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public List<UsuarioDTO> listarTodos() {
@@ -26,13 +31,20 @@ public class UsuarioService {
 
     // Senha recebida fora do DTO para que nunca seja retornada nas respostas da API
     public UsuarioDTO salvar(UsuarioDTO dto, String senha) {
+        if (dto.username() == null || dto.username().isBlank()) {
+            throw new RegraNegocioException("O username é obrigatório.");
+        }
+        if (senha == null || senha.isBlank()) {
+            throw new RegraNegocioException("A senha é obrigatória.");
+        }
         // Impede cadastro de dois usuários com o mesmo username
         if (usuarioRepository.existsByUsername(dto.username())) {
-            throw new RuntimeException("Username já cadastrado: " + dto.username());
+            throw new RegraNegocioException("Username já cadastrado: " + dto.username());
         }
         Usuario usuario = Usuario.builder()
                 .username(dto.username())
-                .senha(senha)
+                // NOVA REGRA: senha armazenada como hash BCrypt — nunca em texto puro
+                .senha(passwordEncoder.encode(senha))
                 .perfil(dto.perfil())
                 .build();
         return toDTO(usuarioRepository.save(usuario));

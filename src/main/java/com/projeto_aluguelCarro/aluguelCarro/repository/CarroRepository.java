@@ -14,4 +14,7 @@ public interface CarroRepository extends JpaRepository<Carro, Long> {
 
     // Usado no CarroService para impedir placa duplicada
     boolean existsByPlaca(String placa);
+
+    // Conta carros disponíveis — usado no AluguelService para verificar estoque mínimo
+    long countByDisponivelTrue();
 }

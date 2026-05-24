@@ -3,15 +3,34 @@ package com.projeto_aluguelCarro.aluguelCarro.service;
 import com.projeto_aluguelCarro.aluguelCarro.domain.*;
 import com.projeto_aluguelCarro.aluguelCarro.domain.enums.StatusAluguel;
 import com.projeto_aluguelCarro.aluguelCarro.dto.AluguelDTO;
+import com.projeto_aluguelCarro.aluguelCarro.dto.RelatorioMensalDTO;
+import com.projeto_aluguelCarro.aluguelCarro.exception.RegraNegocioException;
 import com.projeto_aluguelCarro.aluguelCarro.repository.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Month;
+import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 public class AluguelService {
+
+    /**
+     * Número mínimo de carros que devem permanecer disponíveis na frota.
+     * Configurável em application.properties: aluguel.estoque.minimo=1
+     * Padrão: 1 (sempre mantém ao menos um carro disponível).
+     */
+    @Value("${aluguel.estoque.minimo:1}")
+    private int estoqueMinimo;
 
     private final AluguelRepository aluguelRepository;
     private final CarroRepository carroRepository;
@@ -25,6 +44,8 @@ public class AluguelService {
         this.clienteRepository = clienteRepository;
         this.usuarioRepository = usuarioRepository;
     }
+
+    // ─── Consultas ─────────────────────────────────────────────────────────────
 
     public List<AluguelDTO> listarTodos() {
         return aluguelRepository.findAll().stream().map(this::toDTO).toList();
@@ -43,13 +64,52 @@ public class AluguelService {
         return aluguelRepository.findByDataInicioBetween(inicio, fim).stream().map(this::toDTO).toList();
     }
 
+    // ─── Relatório anual (representação gráfica) ───────────────────────────────
+
+    /**
+     * Retorna os 12 meses do ano com totalAlugueis e receitaTotal por mês.
+     * Meses sem movimento recebem valores zerados — ideal para gráficos de barras/linhas.
+     */
+    public List<RelatorioMensalDTO> relatorioAnual(int ano) {
+        LocalDate inicio = LocalDate.of(ano, 1, 1);
+        LocalDate fim = LocalDate.of(ano, 12, 31);
+        List<Aluguel> alugueis = aluguelRepository.findByDataInicioBetween(inicio, fim);
+
+        // Agrupa aluguéis pelo número do mês (1–12)
+        Map<Integer, List<Aluguel>> porMes = alugueis.stream()
+                .collect(Collectors.groupingBy(a -> a.getDataInicio().getMonthValue()));
+
+        return IntStream.rangeClosed(1, 12).mapToObj(mes -> {
+            List<Aluguel> doMes = porMes.getOrDefault(mes, List.of());
+            BigDecimal receita = doMes.stream()
+                    .map(Aluguel::getValorTotal)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            String nomeMes = Month.of(mes).getDisplayName(TextStyle.FULL, Locale.forLanguageTag("pt-BR"));
+            return new RelatorioMensalDTO(mes, nomeMes, doMes.size(), receita);
+        }).toList();
+    }
+
+    // ─── Criação e ciclo de vida do aluguel ────────────────────────────────────
+
     public AluguelDTO criar(AluguelDTO dto) {
+        // NOVA REGRA: não permitir aluguel sem os campos obrigatórios (sem "itens")
+        validarCamposObrigatorios(dto);
+
         Carro carro = carroRepository.findById(dto.carroId())
                 .orElseThrow(() -> new RuntimeException("Carro não encontrado: " + dto.carroId()));
 
         // Carro só pode ser alugado se estiver disponível
         if (!carro.getDisponivel()) {
-            throw new RuntimeException("Carro não está disponível para aluguel.");
+            throw new RegraNegocioException("Carro não está disponível para aluguel.");
+        }
+
+        // NOVA REGRA: verificar estoque mínimo antes de permitir o aluguel
+        long disponiveis = carroRepository.countByDisponivelTrue();
+        if (disponiveis <= estoqueMinimo) {
+            throw new RegraNegocioException(
+                    "Estoque insuficiente: restam apenas " + disponiveis
+                    + " carro(s) disponível(is) e o mínimo obrigatório é " + estoqueMinimo + ".");
         }
 
         Cliente cliente = clienteRepository.findById(dto.clienteId())
@@ -64,7 +124,7 @@ public class AluguelService {
         // Calcula a quantidade de dias e valida o intervalo de datas
         long dias = ChronoUnit.DAYS.between(dto.dataInicio(), dto.dataFim());
         if (dias <= 0) {
-            throw new RuntimeException("A data fim deve ser posterior à data de início.");
+            throw new RegraNegocioException("A data fim deve ser posterior à data de início.");
         }
 
         // valorTotal = dias × valorDiaria do carro
@@ -106,6 +166,29 @@ public class AluguelService {
         carroRepository.save(aluguel.getCarro());
         return toDTO(aluguelRepository.save(aluguel));
     }
+
+    // ─── Validações internas ────────────────────────────────────────────────────
+
+    /**
+     * Garante que todos os campos obrigatórios estejam presentes.
+     * Um aluguel sem cliente, sem carro ou sem datas não pode ser criado.
+     */
+    private void validarCamposObrigatorios(AluguelDTO dto) {
+        if (dto.clienteId() == null) {
+            throw new RegraNegocioException("O cliente é obrigatório para criar um aluguel.");
+        }
+        if (dto.carroId() == null) {
+            throw new RegraNegocioException("O carro é obrigatório para criar um aluguel.");
+        }
+        if (dto.dataInicio() == null) {
+            throw new RegraNegocioException("A data de início é obrigatória.");
+        }
+        if (dto.dataFim() == null) {
+            throw new RegraNegocioException("A data de fim é obrigatória.");
+        }
+    }
+
+    // ─── Conversão DTO ↔ Entidade ───────────────────────────────────────────────
 
     private AluguelDTO toDTO(Aluguel a) {
         return new AluguelDTO(

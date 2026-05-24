@@ -14,9 +14,11 @@ Aplicação web REST para gerenciamento de aluguel de veículos, cobrindo cadast
 | Spring Boot | 4.0.6 |
 | Spring Data JPA | (incluso no Boot) |
 | Spring Web MVC | (incluso no Boot) |
+| Spring Security Crypto | (incluso no Boot) |
 | MySQL | 8+ |
 | Lombok | latest |
 | Maven | 3.9+ |
+| JJWT (JSON Web Token) | 0.12.6 |
 
 ---
 
@@ -102,6 +104,7 @@ public interface CarroRepository extends JpaRepository<Carro, Long> {
     List<Carro> findByDisponivelTrue();
     Optional<Carro> findByPlaca(String placa);
     boolean existsByPlaca(String placa);
+    long countByDisponivelTrue(); // controle de estoque mínimo
 }
 ```
 
@@ -144,17 +147,28 @@ src/main/java/com/projeto_aluguelCarro/aluguelCarro/
 │
 ├── AluguelCarroApplication.java        ← Classe principal (ponto de entrada)
 │
+├── config/                             ← Configurações da aplicação
+│   └── AppConfig.java                  ← Bean BCryptPasswordEncoder
+│
+├── exception/                          ← Tratamento centralizado de erros
+│   ├── RegraNegocioException.java      ← Exceção para violações de regra de negócio
+│   └── GlobalExceptionHandler.java     ← @RestControllerAdvice — respostas HTTP padronizadas
+│
 ├── controller/                         ← Camada de Apresentação
 │   ├── CarroController.java
 │   ├── ClienteController.java
 │   ├── AluguelController.java
-│   └── UsuarioController.java
+│   ├── UsuarioController.java
+│   ├── AuthController.java             ← POST /auth/login → JWT
+│   └── RelatorioController.java        ← GET /relatorios/alugueis-anuais
 │
 ├── service/                            ← Camada de Serviço
 │   ├── CarroService.java
 │   ├── ClienteService.java
 │   ├── AluguelService.java
-│   └── UsuarioService.java
+│   ├── UsuarioService.java
+│   ├── AuthService.java                ← Valida credenciais e emite token
+│   └── TokenService.java              ← Geração e validação de JWT
 │
 ├── domain/                             ← Camada de Domínio
 │   ├── Carro.java
@@ -169,7 +183,10 @@ src/main/java/com/projeto_aluguelCarro/aluguelCarro/
 │   ├── CarroDTO.java
 │   ├── ClienteDTO.java
 │   ├── AluguelDTO.java
-│   └── UsuarioDTO.java
+│   ├── UsuarioDTO.java
+│   ├── LoginRequestDTO.java            ← Credenciais de login
+│   ├── TokenDTO.java                   ← Resposta com JWT e expiração
+│   └── RelatorioMensalDTO.java         ← Dados mensais para gráficos
 │
 └── repository/                         ← Camada de Persistência (DAO)
     ├── CarroRepository.java
@@ -193,7 +210,7 @@ Representa os veículos disponíveis para aluguel.
 | modelo | String | Modelo do veículo (ex: Corolla) |
 | placa | String | Placa única do veículo |
 | ano | Integer | Ano de fabricação |
-| valorDiaria | BigDecimal | Valor cobrado por dia de aluguel |
+| valorDiaria | BigDecimal | Valor cobrado por dia de aluguel (≥ 0) |
 | disponivel | Boolean | Indica se o carro está disponível |
 | categoria | String | Categoria do veículo (ex: Econômico, SUV) |
 
@@ -206,7 +223,7 @@ Representa os clientes cadastrados no sistema.
 | id | Long | Identificador único |
 | nome | String | Nome completo |
 | cpf | String | CPF único do cliente |
-| email | String | Endereço de e-mail |
+| email | String | Endereço de e-mail (deve ter formato válido) |
 | telefone | String | Número de telefone |
 | endereco | String | Endereço residencial |
 | cnh | String | Número da carteira de motorista |
@@ -234,7 +251,7 @@ Representa os usuários do sistema (atendentes e administradores).
 |---|---|---|
 | id | Long | Identificador único |
 | username | String | Nome de usuário único |
-| senha | String | Senha do usuário |
+| senha | String | Senha armazenada como hash BCrypt |
 | perfil | PerfilUsuario | ADMIN ou ATENDENTE |
 
 ---
@@ -243,21 +260,37 @@ Representa os usuários do sistema (atendentes e administradores).
 
 ### Carro
 - A placa deve ser única no sistema
+- O **valor da diária não pode ser negativo**
 - Ao criar um aluguel, o carro é marcado como **indisponível** automaticamente
 - Ao concluir ou cancelar o aluguel, o carro volta a ficar **disponível**
 
 ### Cliente
 - O CPF deve ser único no sistema
+- O **e-mail deve ter formato válido** (ex: `usuario@dominio.com`) quando informado
 - Um cliente **não pode ser removido** se possuir aluguéis registrados
 
 ### Aluguel
+- **Todos os campos obrigatórios devem ser informados** (cliente, carro, datas) — não é permitido criar um aluguel incompleto
 - O **valor total é calculado automaticamente**: `(dataFim - dataInicio) × valorDiária`
 - A data fim deve ser posterior à data de início
 - Só é possível alugar um carro que esteja disponível
+- **Estoque mínimo controlado**: o sistema mantém um número mínimo de carros disponíveis (configurável em `application.properties`). Novos aluguéis são bloqueados quando a quantidade disponível atingir o mínimo
+- **Não é permitido alugar se o estoque estiver insuficiente**
+
+### Usuário
+- A **senha é armazenada como hash BCrypt** — nunca em texto puro
+- O username deve ser único no sistema
+- **Token JWT com expiração**: ao fazer login em `POST /auth/login`, o sistema retorna um token JWT válido por 24 horas (configurável). O token deve ser enviado no header `Authorization: Bearer <token>` nas requisições protegidas
 
 ---
 
 ## Endpoints da API
+
+### Autenticação — `/auth`
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| POST | `/auth/login` | Autentica o usuário e retorna um token JWT |
 
 ### Carros — `/carros`
 
@@ -286,8 +319,8 @@ Representa os usuários do sistema (atendentes e administradores).
 |---|---|---|
 | GET | `/alugueis` | Lista todos os aluguéis |
 | GET | `/alugueis/{id}` | Busca aluguel por ID |
-| GET | `/alugueis/cliente/{clienteId}` | Lista aluguéis de um cliente |
-| GET | `/alugueis/periodo?inicio=&fim=` | Lista aluguéis por período |
+| GET | `/alugueis/cliente/{clienteId}` | **Informa aluguéis do cliente** |
+| GET | `/alugueis/periodo?inicio=&fim=` | **Informa aluguéis por período** |
 | POST | `/alugueis` | Registra novo aluguel |
 | PATCH | `/alugueis/{id}/concluir` | Conclui o aluguel e libera o carro |
 | PATCH | `/alugueis/{id}/cancelar` | Cancela o aluguel e libera o carro |
@@ -301,9 +334,39 @@ Representa os usuários do sistema (atendentes e administradores).
 | POST | `/usuarios` | Cadastra novo usuário |
 | DELETE | `/usuarios/{id}` | Remove usuário |
 
+### Relatórios — `/relatorios`
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/relatorios/alugueis-anuais?ano=2026` | **Representação gráfica dos aluguéis anuais** (dados mensais) |
+
 ---
 
 ## Exemplos de Requisição
+
+### Login e obtenção de token
+
+```json
+POST /auth/login
+{
+  "username": "atendente01",
+  "senha": "minhasenha"
+}
+```
+
+Resposta:
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhdGVuZGVudGUwMSIsImlhdCI6...",
+  "tipo": "Bearer",
+  "expiracao": "2026-05-25T10:30:00"
+}
+```
+
+Use o token nas próximas requisições:
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+```
 
 ### Cadastrar um carro
 
@@ -358,6 +421,23 @@ POST /usuarios
 }
 ```
 
+### Relatório anual para gráfico
+
+```
+GET /relatorios/alugueis-anuais?ano=2026
+```
+
+Resposta (12 meses — ideal para gráficos de barras ou linhas):
+```json
+[
+  { "mes": 1,  "nomeMes": "janeiro",   "totalAlugueis": 5,  "receitaTotal": 2500.00 },
+  { "mes": 2,  "nomeMes": "fevereiro", "totalAlugueis": 3,  "receitaTotal": 1200.00 },
+  { "mes": 3,  "nomeMes": "março",     "totalAlugueis": 8,  "receitaTotal": 3600.00 },
+  ...
+  { "mes": 12, "nomeMes": "dezembro",  "totalAlugueis": 0,  "receitaTotal": 0.00    }
+]
+```
+
 ---
 
 ## Banco de Dados
@@ -388,12 +468,40 @@ carros
 
 ---
 
+## Segurança
+
+### Hash de senha (BCrypt)
+As senhas são armazenadas como hash BCrypt com strength 10 (2^10 iterações). Nunca é possível recuperar a senha original — a verificação é feita comparando o hash com a senha informada no login.
+
+### Token JWT
+Após o login em `POST /auth/login`, o sistema retorna um token JWT assinado com HMAC-SHA256. O token expira em **24 horas** (configurável em `application.properties`).
+
+```
+Authorization: Bearer <token>
+```
+
+Configuração do JWT em `application.properties`:
+```properties
+jwt.secret=sua-chave-secreta-longa-aqui
+jwt.expiracao-ms=86400000   # 24 horas em milissegundos
+```
+
+### Controle de estoque mínimo
+O número mínimo de carros disponíveis pode ser ajustado:
+```properties
+aluguel.estoque.minimo=1   # pelo menos 1 carro sempre disponível
+```
+
+---
+
 ## Dependências (pom.xml)
 
 | Dependência | Finalidade |
 |---|---|
 | `spring-boot-starter-data-jpa` | Integração com banco via JPA/Hibernate |
 | `spring-boot-starter-webmvc` | Criação de endpoints REST |
+| `spring-security-crypto` | BCrypt para hash de senhas |
+| `jjwt-api / jjwt-impl / jjwt-jackson` | Geração e validação de tokens JWT |
 | `mysql-connector-j` | Driver de conexão com MySQL |
 | `lombok` | Geração automática de getters, setters, construtores e builder |
 
