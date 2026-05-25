@@ -18,4 +18,7 @@ public interface AluguelRepository extends JpaRepository<Aluguel, Long> {
 
     // Usado no ClienteService para bloquear exclusão de cliente com aluguéis
     boolean existsByClienteId(Long clienteId);
+
+    // Usado no CarroService para bloquear exclusão de carro com aluguéis
+    boolean existsByCarroId(Long carroId);
 }

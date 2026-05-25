@@ -3,6 +3,7 @@ package com.projeto_aluguelCarro.aluguelCarro.service;
 import com.projeto_aluguelCarro.aluguelCarro.domain.Carro;
 import com.projeto_aluguelCarro.aluguelCarro.dto.CarroDTO;
 import com.projeto_aluguelCarro.aluguelCarro.exception.RegraNegocioException;
+import com.projeto_aluguelCarro.aluguelCarro.repository.AluguelRepository;
 import com.projeto_aluguelCarro.aluguelCarro.repository.CarroRepository;
 import org.springframework.stereotype.Service;
 
@@ -13,9 +14,11 @@ import java.util.List;
 public class CarroService {
 
     private final CarroRepository carroRepository;
+    private final AluguelRepository aluguelRepository;
 
-    public CarroService(CarroRepository carroRepository) {
+    public CarroService(CarroRepository carroRepository, AluguelRepository aluguelRepository) {
         this.carroRepository = carroRepository;
+        this.aluguelRepository = aluguelRepository;
     }
 
     public List<CarroDTO> listarTodos() {
@@ -57,6 +60,10 @@ public class CarroService {
     }
 
     public void deletar(Long id) {
+        // Bloqueia exclusão se o carro tiver aluguéis registrados
+        if (aluguelRepository.existsByCarroId(id)) {
+            throw new RegraNegocioException("Carro possui aluguéis registrados e não pode ser removido.");
+        }
         carroRepository.deleteById(id);
     }
 

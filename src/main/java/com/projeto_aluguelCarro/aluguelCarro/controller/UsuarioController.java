@@ -40,8 +40,19 @@ public class UsuarioController {
     // Recebe Map para extrair a senha sem incluí-la no UsuarioDTO, evitando que seja retornada na resposta
     @PostMapping
     public UsuarioDTO salvar(@RequestBody Map<String, String> body) {
-        UsuarioDTO dto = new UsuarioDTO(null, body.get("username"),
-                PerfilUsuario.valueOf(body.get("perfil")));
+        String perfilStr = body.get("perfil");
+        if (perfilStr == null || perfilStr.isBlank()) {
+            throw new com.projeto_aluguelCarro.aluguelCarro.exception.RegraNegocioException(
+                    "O perfil é obrigatório. Valores aceitos: ADMIN, ATENDENTE.");
+        }
+        PerfilUsuario perfil;
+        try {
+            perfil = PerfilUsuario.valueOf(perfilStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new com.projeto_aluguelCarro.aluguelCarro.exception.RegraNegocioException(
+                    "Perfil inválido: '" + perfilStr + "'. Valores aceitos: ADMIN, ATENDENTE.");
+        }
+        UsuarioDTO dto = new UsuarioDTO(null, body.get("username"), perfil);
         return usuarioService.salvar(dto, body.get("senha"));
     }
 

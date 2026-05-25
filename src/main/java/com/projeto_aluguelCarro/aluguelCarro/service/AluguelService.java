@@ -8,6 +8,7 @@ import com.projeto_aluguelCarro.aluguelCarro.exception.RegraNegocioException;
 import com.projeto_aluguelCarro.aluguelCarro.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -76,8 +77,9 @@ public class AluguelService {
         List<Aluguel> alugueis = aluguelRepository.findByDataInicioBetween(inicio, fim);
 
         // Agrupa aluguéis pelo número do mês (1–12)
+        // Cast explícito para Integer necessário — sem ele o compilador infere Object
         Map<Integer, List<Aluguel>> porMes = alugueis.stream()
-                .collect(Collectors.groupingBy(a -> a.getDataInicio().getMonthValue()));
+                .collect(Collectors.groupingBy(a -> (Integer) a.getDataInicio().getMonthValue()));
 
         return IntStream.rangeClosed(1, 12).mapToObj(mes -> {
             List<Aluguel> doMes = porMes.getOrDefault(mes, List.of());
@@ -92,6 +94,7 @@ public class AluguelService {
 
     // ─── Criação e ciclo de vida do aluguel ────────────────────────────────────
 
+    @Transactional
     public AluguelDTO criar(AluguelDTO dto) {
         // NOVA REGRA: não permitir aluguel sem os campos obrigatórios (sem "itens")
         validarCamposObrigatorios(dto);
@@ -147,6 +150,7 @@ public class AluguelService {
         return toDTO(aluguelRepository.save(aluguel));
     }
 
+    @Transactional
     public AluguelDTO concluir(Long id) {
         Aluguel aluguel = aluguelRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Aluguel não encontrado: " + id));
@@ -157,6 +161,7 @@ public class AluguelService {
         return toDTO(aluguelRepository.save(aluguel));
     }
 
+    @Transactional
     public AluguelDTO cancelar(Long id) {
         Aluguel aluguel = aluguelRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Aluguel não encontrado: " + id));
