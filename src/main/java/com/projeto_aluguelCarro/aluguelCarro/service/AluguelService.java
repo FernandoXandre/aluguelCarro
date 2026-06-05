@@ -107,7 +107,7 @@ public class AluguelService {
             throw new RegraNegocioException("Carro não está disponível para aluguel.");
         }
 
-        // NOVA REGRA: verificar estoque mínimo antes de permitir o aluguel
+        // Verifica estoque mínimo antes de permitir o aluguel
         long disponiveis = carroRepository.countByDisponivelTrue();
         if (disponiveis <= estoqueMinimo) {
             throw new RegraNegocioException(

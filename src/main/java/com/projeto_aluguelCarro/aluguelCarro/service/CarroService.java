@@ -103,7 +103,6 @@ public class CarroService {
                 .placa(dto.placa())
                 .ano(dto.ano())
                 .valorDiaria(dto.valorDiaria())
-                // Garante disponivel = true quando o campo vier null no request
                 .disponivel(dto.disponivel() != null ? dto.disponivel() : true)
                 .categoria(dto.categoria())
                 .build();

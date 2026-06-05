@@ -43,7 +43,6 @@ public class UsuarioService {
         }
         Usuario usuario = Usuario.builder()
                 .username(dto.username())
-                // NOVA REGRA: senha armazenada como hash BCrypt — nunca em texto puro
                 .senha(passwordEncoder.encode(senha))
                 .perfil(dto.perfil())
                 .build();

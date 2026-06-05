@@ -494,6 +494,39 @@ aluguel.estoque.minimo=1   # pelo menos 1 carro sempre disponível
 
 ---
 
+## Rastreabilidade de Requisitos Funcionais
+
+Mapeamento de todos os RFs definidos para o projeto e seu status de implementação.
+
+| RF | Módulo | Descrição | Status | Onde está implementado |
+|---|---|---|---|---|
+| RF01 | Carros | Cadastrar veículo informando marca, modelo, placa, ano, valor da diária e categoria | ✅ Implementado | `CarroService.salvar()` · `POST /carros` |
+| RF02 | Carros | Impedir cadastro de veículos com placa duplicada | ✅ Implementado | `CarroService.salvar()` → `existsByPlaca()` |
+| RF03 | Carros | Listar todos os veículos cadastrados | ✅ Implementado | `CarroService.listarTodos()` · `GET /carros` |
+| RF04 | Carros | Listar apenas veículos disponíveis para locação | ✅ Implementado | `CarroService.listarDisponiveis()` · `GET /carros/disponiveis` |
+| RF05 | Carros | Atualizar dados de um veículo (exceto a placa) | ✅ Implementado | `CarroService.atualizar()` · `PUT /carros/{id}` |
+| RF06 | Carros | Remover um veículo da frota | ✅ Implementado | `CarroService.deletar()` · `DELETE /carros/{id}` |
+| RF07 | Clientes | Cadastrar cliente informando nome, CPF, e-mail, telefone, endereço e CNH | ✅ Implementado | `ClienteService.salvar()` · `POST /clientes` |
+| RF08 | Clientes | Impedir cadastro de clientes com CPF duplicado | ✅ Implementado | `ClienteService.salvar()` → `existsByCpf()` |
+| RF09 | Clientes | Listar todos os clientes e permitir consulta por ID | ✅ Implementado | `ClienteService.listarTodos()` / `buscarPorId()` · `GET /clientes` / `GET /clientes/{id}` |
+| RF10 | Clientes | Atualizar dados de um cliente (exceto CPF) | ✅ Implementado | `ClienteService.atualizar()` · `PUT /clientes/{id}` |
+| RF11 | Clientes | Bloquear exclusão de cliente que possua aluguéis registrados | ✅ Implementado | `ClienteService.deletar()` → `existsByClienteId()` |
+| RF12 | Aluguéis | Registrar aluguel vinculando cliente, veículo e usuário responsável | ✅ Implementado | `AluguelService.criar()` · `POST /alugueis` |
+| RF13 | Aluguéis | Calcular automaticamente o valor total (dias × valor da diária) | ✅ Implementado | `AluguelService.criar()` → `valorDiaria × dias` |
+| RF14 | Aluguéis | Impedir criação de aluguel com veículo indisponível | ✅ Implementado | `AluguelService.criar()` → verifica `disponivel == false` |
+| RF15 | Aluguéis | Impedir datas com dataFim anterior ou igual a dataInicio | ✅ Implementado | `AluguelService.criar()` → `ChronoUnit.DAYS ≤ 0` lança exceção |
+| RF16 | Aluguéis | Marcar o veículo como indisponível ao criar um aluguel | ✅ Implementado | `AluguelService.criar()` → `carro.setDisponivel(false)` |
+| RF17 | Aluguéis | Permitir concluir um aluguel, liberando o veículo | ✅ Implementado | `AluguelService.concluir()` · `PATCH /alugueis/{id}/concluir` |
+| RF18 | Aluguéis | Permitir cancelar um aluguel, liberando o veículo | ✅ Implementado | `AluguelService.cancelar()` · `PATCH /alugueis/{id}/cancelar` |
+| RF19 | Aluguéis | Listar aluguéis por cliente e por período de data de início | ✅ Implementado | `GET /alugueis/cliente/{id}` · `GET /alugueis/periodo?inicio=&fim=` |
+| RF20 | Usuários | Cadastrar usuários com perfil ADMIN ou ATENDENTE | ✅ Implementado | `UsuarioService.salvar()` · `POST /usuarios` |
+| RF21 | Usuários | Impedir cadastro de usuários com username duplicado | ✅ Implementado | `UsuarioService.salvar()` → `existsByUsername()` |
+| RF22 | Usuários | Nunca retornar a senha do usuário nas respostas da API | ✅ Implementado | `UsuarioDTO` omite a senha; controller recebe via `Map<String, String>` |
+
+**Todos os 22 requisitos funcionais estão implementados.**
+
+---
+
 ## Dependências (pom.xml)
 
 | Dependência | Finalidade |
