@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aluguel_carro_db
+    environment:
+      POSTGRES_DB: aluguel_carro
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aluguel_carro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: aluguel_carro_app
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/aluguel_carro
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: aluguel-carro-senac-secret-key-muito-longa-para-ser-segura-2026
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
