@@ -17,6 +17,17 @@ public class ClienteService {
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
+    private static boolean cpfValido(String cpf) {
+        String nums = cpf.replaceAll("\\D", "");
+        if (nums.length() != 11 || nums.chars().distinct().count() == 1) return false;
+        int d1 = 0, d2 = 0;
+        for (int i = 0; i < 9; i++) d1 += (nums.charAt(i) - '0') * (10 - i);
+        d1 = (d1 * 10 % 11) % 10;
+        for (int i = 0; i < 10; i++) d2 += (nums.charAt(i) - '0') * (11 - i);
+        d2 = (d2 * 10 % 11) % 10;
+        return d1 == (nums.charAt(9) - '0') && d2 == (nums.charAt(10) - '0');
+    }
+
     private final ClienteRepository clienteRepository;
     private final AluguelRepository aluguelRepository;
 
@@ -74,6 +85,9 @@ public class ClienteService {
         }
         if (dto.cpf() == null || dto.cpf().isBlank()) {
             throw new RegraNegocioException("O CPF do cliente é obrigatório.");
+        }
+        if (!cpfValido(dto.cpf())) {
+            throw new RegraNegocioException("CPF inválido: " + dto.cpf());
         }
         // NOVA REGRA: e-mail deve ter formato válido (quando informado)
         if (dto.email() != null && !dto.email().isBlank()) {
